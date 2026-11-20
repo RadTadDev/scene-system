@@ -1,0 +1,14 @@
+{
+    "name": "RadTadDev.SceneSystem",
+    "rootNamespace": "RadTadDev.SceneSystem",
+    "references": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
