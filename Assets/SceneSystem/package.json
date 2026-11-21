@@ -1,11 +1,11 @@
 {
     "name": "com.radtaddev.scenesystem",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "displayName": "Scene System",
     "description": "",
     "unity": "6000.6",
     "author": {
-        "name": "Tad DiDio",
+        "name": "RadTadDev",
         "url": "https://github.com/RadTadDev"
     },
     "documentationUrl": "https://github.com/RadTadDev/scene-system#readme",

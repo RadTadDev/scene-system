@@ -76,6 +76,7 @@ namespace RadTadDev.SceneSystem.Tests
         {
             var gateA = _fakes.Hold("load:A");
             var transaction = Start(None, new[] { "A", "B" });
+            await Task.Yield();
 
             // Both loads start at once, before either finishes.
             CollectionAssert.AreEqual(new[] { "load:A", "load:B" }, _fakes.Events);
@@ -93,6 +94,7 @@ namespace RadTadDev.SceneSystem.Tests
         {
             var gateInstallA = _fakes.Hold("install:A");
             var transaction = Start(None, new[] { "A", "B" });
+            await Task.Yield();
 
             CollectionAssert.AreEqual(new[] { "load:A", "load:B", "install:A" }, _fakes.Events);
 
@@ -108,6 +110,7 @@ namespace RadTadDev.SceneSystem.Tests
         {
             var gateInstalledA = _fakes.Hold("installed:A");
             var transaction = Start(None, new[] { "A", "B" });
+            await Task.Yield();
 
             CollectionAssert.AreEqual(new[] { "load:A", "load:B", "install:A", "installed:A" }, _fakes.Events);
 
@@ -276,6 +279,7 @@ namespace RadTadDev.SceneSystem.Tests
 
             var gateUninstallA = _fakes.Hold("uninstall:A");
             var transaction = Start(new[] { "A", "B" }, None);
+            await Task.Yield();
 
             CollectionAssert.AreEqual(new[] { "uninstall:A" }, _fakes.Events);
 
@@ -295,6 +299,7 @@ namespace RadTadDev.SceneSystem.Tests
 
             var gateUninstallA = _fakes.Hold("uninstall:A");
             var transaction = Start(new[] { "A" }, new[] { "C" });
+            await Task.Yield();
 
             // Nothing else starts until the uninstall finishes.
             CollectionAssert.AreEqual(new[] { "uninstall:A" }, _fakes.Events);
@@ -315,6 +320,7 @@ namespace RadTadDev.SceneSystem.Tests
 
             var gateUninstalledA = _fakes.Hold("uninstalled:A");
             var transaction = Start(new[] { "A" }, None);
+            await Task.Yield();
 
             CollectionAssert.AreEqual(new[] { "uninstall:A", "uninstalled:A" }, _fakes.Events);
 
@@ -333,6 +339,7 @@ namespace RadTadDev.SceneSystem.Tests
             var gateUnloadA = _fakes.Hold("unload:A");
             var gateUnloadB = _fakes.Hold("unload:B");
             var transaction = Start(new[] { "A", "B" }, None);
+            await Task.Yield();
 
             CollectionAssert.AreEqual(
                 new[] { "uninstall:A", "uninstalled:A", "uninstall:B", "uninstalled:B", "unload:A", "unload:B" },
@@ -614,6 +621,313 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.IsEmpty(_fakes.Events);
             Assert.IsFalse(system.IsBusy);
             Assert.IsTrue(_logs.Contains("destroyed while a transaction was waiting"));
+        }
+
+        // ---- Begin and finish events ----
+
+        [Test]
+        public async Task OnBeginFiresOnceBeforeAnySceneOperation()
+        {
+            var transaction = Start(None, new[] { "A", "B" });
+            var sceneCallsAtBegin = new List<int>();
+            transaction.OnBegin += () => sceneCallsAtBegin.Add(_fakes.Events.Count);
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { 0 }, sceneCallsAtBegin);
+        }
+
+        [Test]
+        public async Task OnBeginFiresOnceWhenDelayed()
+        {
+            var transaction = Start(None, new[] { "A" }, delay: 0.1f);
+            var begins = 0;
+            transaction.OnBegin += () => begins++;
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.AreEqual(1, begins);
+        }
+
+        [Test]
+        public async Task OnFinishReportsTrueOnSuccess()
+        {
+            var transaction = Start(None, new[] { "A" });
+            var results = new List<bool>();
+            transaction.OnFinish += results.Add;
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { true }, results);
+        }
+
+        [Test]
+        public async Task OnFinishReportsFalseOnFailure()
+        {
+            _fakes.Fail("load:A");
+            var transaction = Start(None, new[] { "A" });
+            var results = new List<bool>();
+            transaction.OnFinish += results.Add;
+
+            Assert.IsFalse(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { false }, results);
+        }
+
+        [Test]
+        public async Task OnFinishFiresAfterLastProgressAndOnce()
+        {
+            var order = new List<string>();
+            var transaction = Start(None, new[] { "A" });
+            transaction.OnProgressChanged += p => order.Add("progress:" + p);
+            transaction.OnFinish += _ => order.Add("finish");
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { "progress:1", "finish" }, order);
+        }
+
+        [Test]
+        public async Task OnFinishSeesTransactionDoneAndSystemIdle()
+        {
+            var transaction = Start(None, new[] { "A" });
+            bool doneAtFinish = false, busyAtFinish = true;
+            transaction.OnFinish += _ =>
+            {
+                doneAtFinish = transaction.IsDone;
+                busyAtFinish = _system.IsBusy;
+            };
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(doneAtFinish);
+            Assert.IsFalse(busyAtFinish);
+        }
+
+        [Test]
+        public async Task OnFinishCanStartNextTransition()
+        {
+            var transaction = Start(None, new[] { "A" });
+            SceneTransaction next = null;
+            transaction.OnFinish += _ => next = Start(new[] { "A" }, new[] { "B" });
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsNotNull(next);
+            Assert.IsTrue(await WaitAsync(next));
+            Assert.IsTrue(Loaded("B"));
+        }
+
+        [Test]
+        public async Task OnFinishReportsFalseWhenCancelledWhileWaiting()
+        {
+            using var cancellation = new CancellationTokenSource();
+            var system = new SceneSystem(_fakes.Installer, _fakes.Uninstaller, cancellation.Token);
+            var transaction = StartOn(system, None, new[] { "A" }, _fakes.Manager, null, 5f);
+            var results = new List<bool>();
+            transaction.OnFinish += results.Add;
+
+            cancellation.Cancel();
+
+            Assert.IsFalse(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { false }, results);
+        }
+
+        [Test]
+        public async Task ThrowingOnBeginIsLoggedAndTransactionStillRuns()
+        {
+            var transaction = Start(None, new[] { "A" });
+            transaction.OnBegin += () => throw new InvalidOperationException("boom");
+
+            await Task.Yield();
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(Loaded("A"));
+            Assert.IsTrue(_logs.Contains("OnBegin handler threw"));
+            Assert.IsTrue(_logs.Contains("boom"));
+        }
+
+        [Test]
+        public async Task ThrowingOnBeginDoesNotStopLaterBeginHandlers()
+        {
+            var transaction = Start(None, new[] { "A" });
+            var called = false;
+            transaction.OnBegin += () => throw new InvalidOperationException("boom");
+            transaction.OnBegin += () => called = true;
+
+            await Task.Yield();
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(called);
+        }
+
+        [Test]
+        public async Task ThrowingOnFinishKeepsTheResultAndIsLogged()
+        {
+            var transaction = Start(None, new[] { "A" });
+            transaction.OnFinish += _ => throw new InvalidOperationException("boom");
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(_logs.Contains("OnFinish handler threw"));
+            Assert.IsTrue(_logs.Contains("boom"));
+        }
+
+        [Test]
+        public async Task ThrowingOnFinishDoesNotStopLaterFinishHandlers()
+        {
+            _fakes.Fail("load:A");
+            var transaction = Start(None, new[] { "A" });
+            var reported = new List<bool>();
+            transaction.OnFinish += _ => throw new InvalidOperationException("boom");
+            transaction.OnFinish += reported.Add;
+
+            Assert.IsFalse(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { false }, reported);
+        }
+
+        [Test]
+        public async Task ThrowingOnFinishLeavesSystemIdleAndAcceptsNextTransition()
+        {
+            var transaction = Start(None, new[] { "A" });
+            transaction.OnFinish += _ => throw new InvalidOperationException("boom");
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsFalse(_system.IsBusy);
+            Assert.IsTrue(await WaitAsync(Start(new[] { "A" }, new[] { "B" })));
+            Assert.IsTrue(Loaded("B"));
+        }
+
+        [Test]
+        public async Task ThrowingOnProgressIsLoggedAndTransactionCompletes()
+        {
+            var transaction = Start(None, new[] { "A" });
+            transaction.OnProgressChanged += _ => throw new InvalidOperationException("boom");
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(Loaded("A"));
+            Assert.AreEqual(1f, transaction.Progress);
+            Assert.IsTrue(_logs.Contains("OnProgressChanged handler threw"));
+            Assert.IsTrue(_logs.Contains("boom"));
+        }
+
+        [Test]
+        public async Task ThrowingOnProgressDoesNotStopLaterProgressHandlers()
+        {
+            var transaction = Start(None, new[] { "A" });
+            var progress = new List<float>();
+            transaction.OnProgressChanged += _ => throw new InvalidOperationException("boom");
+            transaction.OnProgressChanged += progress.Add;
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { 1f }, progress);
+        }
+
+        [Test]
+        public async Task ThrowingOnProgressDoesNotStopLaterSteps()
+        {
+            var transaction = Start(None, new[] { "A", "B" });
+            transaction.OnProgressChanged += _ => throw new InvalidOperationException("boom");
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { "load:A", "load:B", "install:A", "installed:A", "install:B", "installed:B" },
+                _fakes.Events);
+        }
+
+        [Test]
+        public async Task EveryThrowingHandlerIsLoggedSeparately()
+        {
+            var transaction = Start(None, new[] { "A" });
+            transaction.OnBegin += () => throw new InvalidOperationException("first begin");
+            transaction.OnBegin += () => throw new InvalidOperationException("second begin");
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(_logs.Contains("first begin"));
+            Assert.IsTrue(_logs.Contains("second begin"));
+        }
+
+        [Test]
+        public async Task OnQueuedFiresOnceWithTheRequestedDelay()
+        {
+            var transaction = Start(None, new[] { "A" }, delay: 0.25f);
+            var delays = new List<TimeSpan>();
+            transaction.OnQueued += delays.Add;
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { TimeSpan.FromSeconds(0.25) }, delays);
+        }
+
+        [Test]
+        public async Task OnQueuedIsNotFiredWithoutDelay()
+        {
+            var transaction = Start(None, new[] { "A" });
+            var queued = 0;
+            transaction.OnQueued += _ => queued++;
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.AreEqual(0, queued);
+        }
+
+        [Test]
+        public async Task OnQueuedFiresBeforeOnBeginAndBeforeAnySceneOperation()
+        {
+            var transaction = Start(None, new[] { "A" }, delay: 0.1f);
+            var order = new List<string>();
+            transaction.OnQueued += _ => order.Add("queued");
+            transaction.OnBegin += () => order.Add("begin:" + _fakes.Events.Count);
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { "queued", "begin:0" }, order);
+        }
+
+        [Test]
+        public async Task OnQueuedCanBeSubscribedRightAfterTransition()
+        {
+            var transaction = Start(None, new[] { "A" }, delay: 0.1f);
+            var queued = false;
+
+            // Subscribed after Transition returned. A synchronous notification would have missed this handler.
+            transaction.OnQueued += _ => queued = true;
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(queued);
+        }
+
+        [Test]
+        public async Task ThrowingOnQueuedIsLoggedAndTransactionStillRuns()
+        {
+            var transaction = Start(None, new[] { "A" }, delay: 0.1f);
+            transaction.OnQueued += _ => throw new InvalidOperationException("boom");
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.IsTrue(Loaded("A"));
+            Assert.IsTrue(_logs.Contains("OnQueued handler threw"));
+            Assert.IsTrue(_logs.Contains("boom"));
+        }
+
+        [Test]
+        public async Task ThrowingOnQueuedDoesNotStopLaterQueuedHandlers()
+        {
+            var transaction = Start(None, new[] { "A" }, delay: 0.1f);
+            var delays = new List<TimeSpan>();
+            transaction.OnQueued += _ => throw new InvalidOperationException("boom");
+            transaction.OnQueued += delays.Add;
+
+            Assert.IsTrue(await WaitAsync(transaction));
+            Assert.AreEqual(1, delays.Count);
+        }
+
+        [Test]
+        public async Task CancelledWhileQueuedStillNotifiesQueuedThenFinishesFalse()
+        {
+            using var cancellation = new CancellationTokenSource();
+            var system = new SceneSystem(_fakes.Installer, _fakes.Uninstaller, cancellation.Token);
+            var transaction = StartOn(system, None, new[] { "A" }, _fakes.Manager, null, 5f);
+            var order = new List<string>();
+            var queuedSeen = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            transaction.OnQueued += _ =>
+            {
+                order.Add("queued");
+                queuedSeen.TrySetResult(true);
+            };
+            transaction.OnFinish += success => order.Add("finish:" + success);
+
+            // Cancel only after the queued notification has run.
+            await queuedSeen.Task;
+            cancellation.Cancel();
+
+            Assert.IsFalse(await WaitAsync(transaction));
+            CollectionAssert.AreEqual(new[] { "queued", "finish:False" }, order);
         }
 
         // ---- Managers ----

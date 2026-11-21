@@ -110,13 +110,21 @@ namespace RadTadDev.SceneSystem
         private async Task ExecuteAsync(OrderedSceneJob job, SceneTransaction transaction, float delaySeconds)
         {
             bool result;
+
+            // Yield so the caller can subscribe to events. Transition returns before this continuation runs.
+            await Task.Yield();
+
             try
             {
                 if (delaySeconds > 0)
                 {
-                    await Task.Delay(TimeSpan.FromSeconds(delaySeconds), _appClosingToken);
+                    var timespan = TimeSpan.FromSeconds(delaySeconds);
+
+                    transaction.NotifyQueued(timespan);
+                    await Task.Delay(timespan, _appClosingToken);
                 }
 
+                transaction.Begin();
                 result = await job.RunAsync();
             }
             catch (OperationCanceledException)
