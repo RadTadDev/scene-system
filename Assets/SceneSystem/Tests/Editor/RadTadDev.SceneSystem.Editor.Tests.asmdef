@@ -5,7 +5,9 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "RadTadDev.SceneSystem",
-        "RadTadDev.SceneSystem.Editor"
+        "RadTadDev.SceneSystem.Editor",
+        "RadTadDev.SceneSystem.Tests",
+        "RadTadDev.Logger"
     ],
     "includePlatforms": [
         "Editor"

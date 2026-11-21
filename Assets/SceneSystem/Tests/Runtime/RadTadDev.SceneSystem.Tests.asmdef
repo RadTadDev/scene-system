@@ -3,8 +3,8 @@
     "rootNamespace": "RadTadDev.SceneSystem.Tests",
     "references": [
         "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner",
-        "RadTadDev.SceneSystem"
+        "RadTadDev.SceneSystem",
+        "RadTadDev.Logger"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

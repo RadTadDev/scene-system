@@ -2,7 +2,8 @@
     "name": "RadTadDev.SceneSystem.Editor",
     "rootNamespace": "RadTadDev.SceneSystem.Editor",
     "references": [
-        "RadTadDev.SceneSystem"
+        "RadTadDev.SceneSystem",
+        "RadTadDev.Logger"
     ],
     "includePlatforms": [
         "Editor"

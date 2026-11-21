@@ -1,7 +1,9 @@
 {
     "name": "RadTadDev.SceneSystem",
     "rootNamespace": "RadTadDev.SceneSystem",
-    "references": [],
+    "references": [
+        "GUID:2469f00d67174e86b2764e40ace82273"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
