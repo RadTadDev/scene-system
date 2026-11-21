@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine.SceneManagement;
@@ -28,12 +29,11 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.AreEqual(
                 new[]
                 {
-                    "install:" + Alpha, "hook-start:" + Alpha, "hook-end:" + Alpha,
-                    "install:" + Beta, "hook-start:" + Beta, "hook-end:" + Beta,
+                    "install:" + Alpha, "hook-start:" + Alpha, "hook-end:" + Alpha, "install:" + Beta,
+                    "hook-start:" + Beta, "hook-end:" + Beta
                 },
                 Events);
         }
-
 
         [Test]
         public async Task UninstalledHookRunsWhileSceneIsStillLoaded()
@@ -57,7 +57,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsFalse(SceneManager.GetSceneByName(Alpha).isLoaded);
         }
 
-
         [Test]
         public async Task UninstalledHookFinishesBeforeTheSceneUnloads()
         {
@@ -77,13 +76,12 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsFalse(SceneManager.GetSceneByName(Alpha).isLoaded);
         }
 
-
         [Test]
         public async Task FailingInstalledHookFailsTheTransaction()
         {
             var manager = new DelegatingSceneManager(SceneMgr)
             {
-                OnInstalledHook = scene => throw new System.InvalidOperationException("hook failed")
+                OnInstalledHook = scene => throw new InvalidOperationException("hook failed")
             };
 
             Assert.IsFalse(await Await(Run(None, new[] { Alpha, Beta }, manager)));

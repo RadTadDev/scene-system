@@ -25,16 +25,6 @@ namespace RadTadDev.SceneSystem.Tests
         /// </summary>
         public int FramesToWait { get; set; } = 2;
 
-
-        /// <summary>
-        /// The name of the root object every loaded scene contains.
-        /// </summary>
-        public static string RootNameFor(string sceneName)
-        {
-            return "Root_" + sceneName;
-        }
-
-
         public async Task<Scene> LoadAsync(SceneReference scene, LoadSceneMode mode = LoadSceneMode.Additive)
         {
             if (!Available.Contains(scene.Name))
@@ -49,7 +39,6 @@ namespace RadTadDev.SceneSystem.Tests
             SceneManager.MoveGameObjectToScene(root, loaded);
             return loaded;
         }
-
 
         public async Task UnloadAsync(SceneReference scene)
         {
@@ -73,18 +62,23 @@ namespace RadTadDev.SceneSystem.Tests
             }
         }
 
-
         public Task OnInstalledAsync(Scene scene)
         {
             return Task.CompletedTask;
         }
-
 
         public Task OnUninstalledAsync(Scene scene)
         {
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// The name of the root object every loaded scene contains.
+        /// </summary>
+        public static string RootNameFor(string sceneName)
+        {
+            return "Root_" + sceneName;
+        }
 
         private async Task WaitFrames()
         {

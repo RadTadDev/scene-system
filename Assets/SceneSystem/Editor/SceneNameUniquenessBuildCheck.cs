@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using UnityEditor;
 using UnityEditor.Build;
@@ -12,6 +13,7 @@ namespace RadTadDev.SceneSystem
     public class SceneNameUniquenessBuildCheck : IPreprocessBuildWithReport
     {
         /// <inheritdoc />
+        [SuppressMessage("Style", "IDE1006", Justification = "…")]
         public int callbackOrder => 0;
 
         /// <inheritdoc />

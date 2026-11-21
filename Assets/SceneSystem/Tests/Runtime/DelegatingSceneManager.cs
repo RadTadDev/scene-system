@@ -12,6 +12,11 @@ namespace RadTadDev.SceneSystem.Tests
     {
         private readonly ISceneManager _inner;
 
+        public DelegatingSceneManager(ISceneManager inner)
+        {
+            _inner = inner;
+        }
+
         /// <summary>
         /// Runs in place of the inner manager's <c>OnInstalledAsync</c> when set.
         /// </summary>
@@ -22,30 +27,20 @@ namespace RadTadDev.SceneSystem.Tests
         /// </summary>
         public Func<Scene, Task> OnUninstalledHook { get; set; }
 
-
-        public DelegatingSceneManager(ISceneManager inner)
-        {
-            _inner = inner;
-        }
-
-
         public Task<Scene> LoadAsync(SceneReference scene, LoadSceneMode mode = LoadSceneMode.Additive)
         {
             return _inner.LoadAsync(scene, mode);
         }
-
 
         public Task UnloadAsync(SceneReference scene)
         {
             return _inner.UnloadAsync(scene);
         }
 
-
         public Task OnInstalledAsync(Scene scene)
         {
             return OnInstalledHook != null ? OnInstalledHook(scene) : _inner.OnInstalledAsync(scene);
         }
-
 
         public Task OnUninstalledAsync(Scene scene)
         {

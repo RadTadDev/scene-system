@@ -91,7 +91,10 @@ namespace RadTadDev.SceneSystem
             ValidateTransition(unloads, loads);
 
             var unloadSteps = unloads
-                .Select(s => unloadManager == null ? _loaded[s.Name] : new SceneStep(s, unloadManager, _loaded[s.Name].LoadedScene))
+                .Select(s =>
+                    unloadManager == null
+                        ? _loaded[s.Name]
+                        : new SceneStep(s, unloadManager, _loaded[s.Name].LoadedScene))
                 .ToList();
             var loadSteps = loads.Select(s => new SceneStep(s, loadManager)).ToList();
 

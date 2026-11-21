@@ -16,6 +16,12 @@ namespace RadTadDev.SceneSystem.Tests
         /// </summary>
         public readonly List<string> Entries = new();
 
+        public void Write(string message, LogLevel level)
+        {
+            Entries.Add(level + ": " + message);
+        }
+
+        public void Close() { }
 
         /// <summary>
         /// Routes all logging into a new capturing sink.
@@ -28,7 +34,6 @@ namespace RadTadDev.SceneSystem.Tests
             return sink;
         }
 
-
         /// <summary>
         /// Restores the logger's console output.
         /// </summary>
@@ -38,24 +43,12 @@ namespace RadTadDev.SceneSystem.Tests
             Log.AddSink(new ConsoleSink());
         }
 
-
         /// <summary>
         /// True if any message contains the text.
         /// </summary>
         public bool Contains(string text)
         {
             return Entries.Any(entry => entry.Contains(text));
-        }
-
-
-        public void Write(string message, LogLevel level)
-        {
-            Entries.Add(level + ": " + message);
-        }
-
-
-        public void Close()
-        {
         }
     }
 }

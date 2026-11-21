@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
-using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace RadTadDev.SceneSystem.Tests
@@ -29,7 +28,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsTrue(Scenes.IsLoaded(Ref(Alpha)));
         }
 
-
         [Test]
         public async Task LoadedSceneContainsItsRootObject()
         {
@@ -37,7 +35,6 @@ namespace RadTadDev.SceneSystem.Tests
 
             Assert.IsTrue(HasRoot(SceneManager.GetSceneByName(Alpha), RootNameOf(Alpha)));
         }
-
 
         [Test]
         public async Task LoadingIsAdditive()
@@ -52,7 +49,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsTrue(SceneManager.GetSceneByName(Beta).isLoaded);
         }
 
-
         [Test]
         public async Task LoadingManyScenesInOneTransactionLoadsAllOfThem()
         {
@@ -62,7 +58,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsTrue(SceneManager.GetSceneByName(Beta).isLoaded);
             Assert.IsTrue(SceneManager.GetSceneByName(Gamma).isLoaded);
         }
-
 
         [Test]
         public async Task LoadingAMissingSceneFailsTheTransaction()
@@ -74,7 +69,6 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.IsEmpty(Events);
         }
 
-
         [Test]
         public async Task SystemRecoversAfterAFailedRealLoad()
         {
@@ -83,7 +77,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsTrue(await Await(Run(None, new[] { Alpha })));
             Assert.IsTrue(SceneManager.GetSceneByName(Alpha).isLoaded);
         }
-
 
         // ---- Install ----
 
@@ -102,7 +95,6 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.AreEqual(new[] { $"{Alpha}:True:True" }, observed);
         }
 
-
         [Test]
         public async Task InstallerSceneHandleIsTheSceneUnityReports()
         {
@@ -117,7 +109,6 @@ namespace RadTadDev.SceneSystem.Tests
 
             CollectionAssert.AreEqual(new[] { true }, matches);
         }
-
 
         [Test]
         public async Task InstallsRunInDeclaredOrderWhenInstallersAreAsync()
@@ -138,7 +129,6 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.AreEqual(new[] { "installed:" + Alpha, "installed:" + Beta }, Events);
         }
 
-
         [Test]
         public async Task InstallsNeverRunAtTheSameTime()
         {
@@ -157,7 +147,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.AreEqual(1, maxActive);
         }
 
-
         [Test]
         public async Task InstallerExceptionFailsTheTransactionAndLeavesSceneLoaded()
         {
@@ -168,7 +157,6 @@ namespace RadTadDev.SceneSystem.Tests
 
             Assert.IsTrue(SceneManager.GetSceneByName(Alpha).isLoaded);
         }
-
 
         [Test]
         public async Task InstallerExceptionStopsLaterInstalls()
@@ -189,7 +177,6 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.DoesNotContain(Events, "install:" + Beta);
         }
 
-
         // ---- Uninstall and unload ----
 
         [Test]
@@ -208,7 +195,6 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.AreEqual(new[] { $"{Alpha}:True:True" }, observed);
         }
 
-
         [Test]
         public async Task UnloadRemovesSceneFromUnity()
         {
@@ -220,7 +206,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsFalse(Scenes.IsLoaded(Ref(Alpha)));
         }
 
-
         [Test]
         public async Task UnloadingOneSceneKeepsTheOthersLoaded()
         {
@@ -231,7 +216,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsFalse(SceneManager.GetSceneByName(Alpha).isLoaded);
             Assert.IsTrue(SceneManager.GetSceneByName(Beta).isLoaded);
         }
-
 
         [Test]
         public async Task UninstallRunsBeforeUnloadInUnity()
@@ -250,7 +234,6 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.AreEqual(new[] { "uninstall:" + Alpha + ":loaded=True" }, Events);
         }
 
-
         [Test]
         public async Task SwappingScenesInOneTransactionUnloadsOldAndLoadsNew()
         {
@@ -263,7 +246,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsTrue(SceneManager.GetSceneByName(Beta).isLoaded);
             CollectionAssert.AreEqual(new[] { "uninstall:" + Alpha, "install:" + Beta }, Events);
         }
-
 
         [Test]
         public async Task ReloadingTheSameSceneInstallsItAgain()
@@ -278,7 +260,6 @@ namespace RadTadDev.SceneSystem.Tests
             CollectionAssert.AreEqual(new[] { "install:" + Alpha }, Events);
         }
 
-
         [Test]
         public async Task UnloadingEverySceneLeavesNoTestSceneLoaded()
         {
@@ -290,7 +271,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.IsFalse(SceneManager.GetSceneByName(Beta).isLoaded);
             Assert.IsFalse(SceneManager.GetSceneByName(Gamma).isLoaded);
         }
-
 
         // ---- Progress and timing ----
 
@@ -308,7 +288,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.AreEqual(1f, progress[progress.Count - 1]);
         }
 
-
         [Test]
         public async Task DelayedTransitionDoesNotLoadBeforeItsDelay()
         {
@@ -323,7 +302,6 @@ namespace RadTadDev.SceneSystem.Tests
             Assert.GreaterOrEqual(watch.Elapsed.TotalSeconds, 0.1);
             Assert.IsTrue(SceneManager.GetSceneByName(Alpha).isLoaded);
         }
-
 
         [Test]
         public async Task AppClosingCancelsDelayedRealTransition()

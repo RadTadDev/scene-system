@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 
 namespace RadTadDev.SceneSystem.Tests
@@ -70,10 +71,7 @@ namespace RadTadDev.SceneSystem.Tests
         [Test]
         public void WorksAsDictionaryKeyByName()
         {
-            var keys = new System.Collections.Generic.Dictionary<SceneReference, int>
-            {
-                [TestScenes.Ref("A")] = 1
-            };
+            var keys = new Dictionary<SceneReference, int> { [TestScenes.Ref("A")] = 1 };
 
             Assert.AreEqual(1, keys[TestScenes.Ref("A")]);
         }

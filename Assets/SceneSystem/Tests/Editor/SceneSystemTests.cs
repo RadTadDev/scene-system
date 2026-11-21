@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -9,12 +10,6 @@ namespace RadTadDev.SceneSystem.Tests
     [TestFixture]
     public class SceneSystemTests
     {
-        private static readonly string[] None = Array.Empty<string>();
-
-        private FakeScenes _fakes;
-        private SceneSystem _system;
-        private CapturingLogSink _logs;
-
         [SetUp]
         public void SetUp()
         {
@@ -31,6 +26,12 @@ namespace RadTadDev.SceneSystem.Tests
             CapturingLogSink.Restore();
             _fakes.Cleanup();
         }
+
+        private static readonly string[] None = Array.Empty<string>();
+
+        private FakeScenes _fakes;
+        private SceneSystem _system;
+        private CapturingLogSink _logs;
 
         // ---- Helpers ----
 
@@ -63,7 +64,10 @@ namespace RadTadDev.SceneSystem.Tests
             return transaction.Completion.Result;
         }
 
-        private bool Loaded(string name) => _system.IsLoaded(TestScenes.Ref(name));
+        private bool Loaded(string name)
+        {
+            return _system.IsLoaded(TestScenes.Ref(name));
+        }
 
         // ---- Loads and installs ----
 
@@ -590,7 +594,7 @@ namespace RadTadDev.SceneSystem.Tests
         [Test]
         public async Task DelayIsAtLeastTheRequestedTime()
         {
-            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var watch = Stopwatch.StartNew();
             var transaction = Start(None, new[] { "A" }, delay: 0.2f);
 
             Assert.IsTrue(await WaitAsync(transaction));
@@ -603,7 +607,7 @@ namespace RadTadDev.SceneSystem.Tests
             using var cancellation = new CancellationTokenSource();
             var system = new SceneSystem(_fakes.Installer, _fakes.Uninstaller, cancellation.Token);
 
-            var transaction = StartOn(system, None, new[] { "A" }, _fakes.Manager, null, delay: 5f);
+            var transaction = StartOn(system, None, new[] { "A" }, _fakes.Manager, null, 5f);
             cancellation.Cancel();
 
             Assert.IsFalse(await WaitAsync(transaction));

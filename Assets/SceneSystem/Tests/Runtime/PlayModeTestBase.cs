@@ -32,9 +32,9 @@ namespace RadTadDev.SceneSystem.Tests
         protected readonly List<string> Events = new();
 
         /// <summary>
-        /// The system under test. Recreated for each test.
+        /// Captured log output. Recreated for each test.
         /// </summary>
-        protected SceneSystem Scenes;
+        protected CapturingLogSink Logs;
 
         /// <summary>
         /// The manager used for loads. Recreated for each test.
@@ -42,10 +42,9 @@ namespace RadTadDev.SceneSystem.Tests
         protected RuntimeSceneManager SceneMgr;
 
         /// <summary>
-        /// Captured log output. Recreated for each test.
+        /// The system under test. Recreated for each test.
         /// </summary>
-        protected CapturingLogSink Logs;
-
+        protected SceneSystem Scenes;
 
         [SetUp]
         public void CreateFreshSystem()
@@ -60,7 +59,6 @@ namespace RadTadDev.SceneSystem.Tests
 
             Scenes = CreateSystem(null, null);
         }
-
 
         [UnityTearDown]
         public IEnumerator UnloadTestScenes()
@@ -86,7 +84,6 @@ namespace RadTadDev.SceneSystem.Tests
             }
         }
 
-
         /// <summary>
         /// Creates a system. Null installers record into <see cref="Events" />.
         /// </summary>
@@ -94,11 +91,10 @@ namespace RadTadDev.SceneSystem.Tests
             CancellationToken token = default)
         {
             return new SceneSystem(
-                installer ?? new Func<Scene, Task>(RecordInstall),
-                uninstaller ?? new Func<Scene, Task>(RecordUninstall),
+                installer ?? RecordInstall,
+                uninstaller ?? RecordUninstall,
                 token);
         }
-
 
         protected Task RecordInstall(Scene scene)
         {
@@ -106,13 +102,11 @@ namespace RadTadDev.SceneSystem.Tests
             return Task.CompletedTask;
         }
 
-
         protected Task RecordUninstall(Scene scene)
         {
             Events.Add("uninstall:" + scene.name);
             return Task.CompletedTask;
         }
-
 
         /// <summary>
         /// Starts a transition on the current system. A null load manager uses <see cref="SceneMgr" />.
@@ -122,7 +116,6 @@ namespace RadTadDev.SceneSystem.Tests
         {
             return Scenes.Transition(Refs(unloads), Refs(loads), loadManager ?? SceneMgr, unloadManager, delay);
         }
-
 
         /// <summary>
         /// Waits for a transaction to finish, failing the test if it takes longer than <see cref="Timeout" />.
@@ -134,7 +127,6 @@ namespace RadTadDev.SceneSystem.Tests
             return transaction.Completion.Result;
         }
 
-
         /// <summary>
         /// Loads the named scenes and checks that the transaction succeeds.
         /// </summary>
@@ -142,7 +134,6 @@ namespace RadTadDev.SceneSystem.Tests
         {
             Assert.IsTrue(await Await(Run(None, names)), "Setup load failed.");
         }
-
 
         protected static SceneReference Ref(string name)
         {
@@ -153,18 +144,15 @@ namespace RadTadDev.SceneSystem.Tests
             return reference;
         }
 
-
         protected static SceneReference[] Refs(string[] names)
         {
             return names.Select(Ref).ToArray();
         }
 
-
         protected static bool HasRoot(Scene scene, string rootName)
         {
             return scene.GetRootGameObjects().Any(root => root.name == rootName);
         }
-
 
         protected static string RootNameOf(string sceneName)
         {
