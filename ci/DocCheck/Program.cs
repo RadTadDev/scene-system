@@ -14,6 +14,8 @@ namespace CsStyle.DocCheck
     /// The compiler skips CS1591 whenever a project has errors, which is always the case for Unity code built
     /// without UnityEngine references. Parsing alone avoids that. Also reports syntax the target C# version
     /// does not support, such as file-scoped namespaces under C# 9.
+    /// Like the compiler, it honors <c>dotnet_diagnostic.CS1591.severity</c> in .editorconfig (so a folder such as
+    /// Tests can opt out) and <c>#pragma warning disable CS1591</c> (so a single file can).
     /// </summary>
     internal static class Program
     {
@@ -47,17 +49,20 @@ namespace CsStyle.DocCheck
                 .ToList();
 
             var trees = new List<SyntaxTree>();
+            var editorConfigs = new EditorConfigs();
             foreach (string file in files)
             {
                 string relativePath = Path.GetRelativePath(root, file).Replace('\\', '/');
                 SyntaxTree tree = CSharpSyntaxTree.ParseText(File.ReadAllText(file), options, relativePath);
                 trees.Add(tree);
-                CheckMembers(((CompilationUnitSyntax)tree.GetRoot()).Members, string.Empty, ContainerKind.Namespace);
+                var compilationUnit = (CompilationUnitSyntax)tree.GetRoot();
+                var suppressions = new DocSuppressions(tree, editorConfigs.TurnsOffMissingDocs(file));
+                CheckMembers(compilationUnit.Members, string.Empty, ContainerKind.Namespace, suppressions);
             }
 
             ReportLanguageErrors(trees);
 
-            foreach (PartialType partialType in PartialTypes.Values.Where(type => !type.HasDocs))
+            foreach (PartialType partialType in PartialTypes.Values.Where(type => !type.HasDocs && type.Finding != null))
             {
                 Findings.Add(partialType.Finding);
             }
@@ -106,13 +111,17 @@ namespace CsStyle.DocCheck
             Findings.AddRange(errors);
         }
 
-        private static void CheckMembers(SyntaxList<MemberDeclarationSyntax> members, string containerName, ContainerKind container)
+        private static void CheckMembers(
+            SyntaxList<MemberDeclarationSyntax> members,
+            string containerName,
+            ContainerKind container,
+            DocSuppressions suppressions)
         {
             foreach (MemberDeclarationSyntax member in members)
             {
                 if (member is BaseNamespaceDeclarationSyntax ns)
                 {
-                    CheckMembers(ns.Members, Join(containerName, ns.Name.ToString()), ContainerKind.Namespace);
+                    CheckMembers(ns.Members, Join(containerName, ns.Name.ToString()), ContainerKind.Namespace, suppressions);
                     continue;
                 }
 
@@ -125,23 +134,23 @@ namespace CsStyle.DocCheck
 
                 if (member is TypeDeclarationSyntax type && type.Modifiers.Any(SyntaxKind.PartialKeyword))
                 {
-                    TrackPartialType(type, name);
+                    TrackPartialType(type, name, suppressions);
                 }
                 else if (!HasDocs(member))
                 {
-                    AddMissingDocs(member, name);
+                    AddMissingDocs(member, name, suppressions);
                 }
 
                 if (member is TypeDeclarationSyntax nestedType)
                 {
                     ContainerKind kind = nestedType is InterfaceDeclarationSyntax ? ContainerKind.Interface : ContainerKind.Type;
-                    CheckMembers(nestedType.Members, name, kind);
+                    CheckMembers(nestedType.Members, name, kind, suppressions);
                 }
                 else if (member is EnumDeclarationSyntax enumType)
                 {
                     foreach (EnumMemberDeclarationSyntax enumMember in enumType.Members.Where(m => !HasDocs(m)))
                     {
-                        AddMissingDocs(enumMember, Join(name, enumMember.Identifier.Text));
+                        AddMissingDocs(enumMember, Join(name, enumMember.Identifier.Text), suppressions);
                     }
                 }
             }
@@ -174,21 +183,32 @@ namespace CsStyle.DocCheck
                 trivia.IsKind(SyntaxKind.MultiLineDocumentationCommentTrivia));
         }
 
-        private static void TrackPartialType(TypeDeclarationSyntax type, string name)
+        private static void TrackPartialType(TypeDeclarationSyntax type, string name, DocSuppressions suppressions)
         {
             string key = $"{name}`{type.Arity}";
             if (!PartialTypes.TryGetValue(key, out PartialType partialType))
             {
-                partialType = new PartialType(Format(GetNameToken(type).GetLocation(), "warning", "CS1591", MissingDocsMessage(name)));
+                partialType = new PartialType();
                 PartialTypes.Add(key, partialType);
             }
 
             partialType.HasDocs |= HasDocs(type);
+
+            // Reported at the first part that is not under a CS1591 pragma. If every part is, nothing is reported.
+            SyntaxToken nameToken = GetNameToken(type);
+            if (partialType.Finding == null && !suppressions.IsSuppressed(nameToken))
+            {
+                partialType.Finding = Format(nameToken.GetLocation(), "warning", "CS1591", MissingDocsMessage(name));
+            }
         }
 
-        private static void AddMissingDocs(SyntaxNode node, string name)
+        private static void AddMissingDocs(SyntaxNode node, string name, DocSuppressions suppressions)
         {
-            Findings.Add(Format(GetNameToken(node).GetLocation(), "warning", "CS1591", MissingDocsMessage(name)));
+            SyntaxToken nameToken = GetNameToken(node);
+            if (!suppressions.IsSuppressed(nameToken))
+            {
+                Findings.Add(Format(nameToken.GetLocation(), "warning", "CS1591", MissingDocsMessage(name)));
+            }
         }
 
         private static string MissingDocsMessage(string name)
@@ -269,14 +289,122 @@ namespace CsStyle.DocCheck
 
         private sealed class PartialType
         {
-            public PartialType(string finding)
-            {
-                Finding = finding;
-            }
-
-            public string Finding { get; }
+            public string Finding { get; set; }
 
             public bool HasDocs { get; set; }
+        }
+
+        // Where CS1591 is turned off in one file. Same rules as the compiler: when .editorconfig turns it off, the
+        // whole file is off and a pragma cannot turn it back on. Otherwise the file's #pragma warning lines that cover
+        // CS1591 apply from their line on, and one with no codes covers every warning.
+        private sealed class DocSuppressions
+        {
+            private readonly bool _offForWholeFile;
+            private readonly List<PragmaWarningDirectiveTriviaSyntax> _pragmas;
+
+            public DocSuppressions(SyntaxTree tree, bool offForWholeFile)
+            {
+                _offForWholeFile = offForWholeFile;
+                _pragmas = tree.GetRoot()
+                    .DescendantNodes(descendIntoTrivia: true)
+                    .OfType<PragmaWarningDirectiveTriviaSyntax>()
+                    .Where(CoversMissingDocs)
+                    .ToList();
+            }
+
+            public bool IsSuppressed(SyntaxToken token)
+            {
+                if (_offForWholeFile)
+                {
+                    return true;
+                }
+
+                PragmaWarningDirectiveTriviaSyntax last = _pragmas
+                    .LastOrDefault(pragma => pragma.SpanStart < token.SpanStart);
+                return last != null && last.DisableOrRestoreKeyword.IsKind(SyntaxKind.DisableKeyword);
+            }
+
+            private static bool CoversMissingDocs(PragmaWarningDirectiveTriviaSyntax pragma)
+            {
+                return pragma.ErrorCodes.Count == 0 || pragma.ErrorCodes.Any(code => IsMissingDocsCode(code.ToString()));
+            }
+
+            // The code can be written as CS1591 or 1591.
+            private static bool IsMissingDocsCode(string code)
+            {
+                return code == "CS1591" || code == "1591";
+            }
+        }
+
+        // The CS1591 severity .editorconfig gives each file. Files are found the way the compiler finds them: every
+        // .editorconfig from the file's folder upward, stopping after one marked root = true.
+        private sealed class EditorConfigs
+        {
+            private readonly Dictionary<string, AnalyzerConfigSet> _setsByFolder = new Dictionary<string, AnalyzerConfigSet>();
+
+            // Off unless the severity is warning or error, matching CI, which only reports warnings and errors.
+            public bool TurnsOffMissingDocs(string filePath)
+            {
+                AnalyzerConfigOptionsResult options = GetSet(Path.GetDirectoryName(filePath)).GetOptionsForSourcePath(filePath);
+                if (!options.TreeOptions.TryGetValue("CS1591", out ReportDiagnostic severity))
+                {
+                    return false;
+                }
+
+                return severity == ReportDiagnostic.Suppress || severity == ReportDiagnostic.Hidden || severity == ReportDiagnostic.Info;
+            }
+
+            private AnalyzerConfigSet GetSet(string folder)
+            {
+                if (_setsByFolder.TryGetValue(folder, out AnalyzerConfigSet set))
+                {
+                    return set;
+                }
+
+                var configs = new List<AnalyzerConfig>();
+                for (DirectoryInfo directory = new DirectoryInfo(folder); directory != null; directory = directory.Parent)
+                {
+                    string path = Path.Combine(directory.FullName, ".editorconfig");
+                    if (!File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    string text = File.ReadAllText(path);
+                    configs.Add(AnalyzerConfig.Parse(text, path));
+                    if (IsRoot(text))
+                    {
+                        break;
+                    }
+                }
+
+                set = AnalyzerConfigSet.Create(configs);
+                _setsByFolder.Add(folder, set);
+                return set;
+            }
+
+            // root = true counts only before the first [section] header.
+            private static bool IsRoot(string text)
+            {
+                foreach (string rawLine in text.Split('\n'))
+                {
+                    string line = rawLine.Trim();
+                    if (line.StartsWith("[", StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    string[] parts = line.Split('=', 2);
+                    if (parts.Length == 2
+                        && parts[0].Trim().Equals("root", StringComparison.OrdinalIgnoreCase)
+                        && parts[1].Trim().Equals("true", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
     }
 }
